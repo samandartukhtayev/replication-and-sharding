@@ -1,0 +1,215 @@
+version: '3.8'
+
+services:
+  # Shard 0 - Primary
+  shard0-primary:
+    image: postgres:15-alpine
+    container_name: shard0-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard0
+      SHARD_ID: 0
+    ports:
+      - "5440:5432"
+    volumes:
+      - shard0_primary_data:/var/lib/postgresql/data
+      - ./scripts/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh
+    command: postgres -c wal_level=replica -c max_wal_senders=3 -c max_replication_slots=3
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q f"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+  # Shard 0 - Replica
+  shard0-replica:
+    image: postgres:15-alpine
+    container_name: shard0-replica
+    user: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard0
+      PGPASSWORD: replicator_password
+    ports:
+      - "5441:5432"
+    volumes:
+      - shard0_replica_data:/var/lib/postgresql/data
+    depends_on:
+      shard0-primary:
+        condition: service_healthy
+    entrypoint: |
+      bash -c "
+      rm -rf /var/lib/postgresql/data/*
+      until PGPASSWORD=replicator_password pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot_0 --host=shard0-primary --port=5432 -U replicator
+      do
+        echo 'Waiting for primary to be ready...'
+        sleep 2
+      done
+      chmod 0700 /var/lib/postgresql/data
+      exec postgres
+      "
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q t"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+  # Shard 1 - Primary
+  shard1-primary:
+    image: postgres:15-alpine
+    container_name: shard1-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard1
+      SHARD_ID: 1
+    ports:
+      - "5442:5432"
+    volumes:
+      - shard1_primary_data:/var/lib/postgresql/data
+      - ./scripts/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh
+    command: postgres -c wal_level=replica -c max_wal_senders=3 -c max_replication_slots=3
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q f"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+  # Shard 1 - Replica
+  shard1-replica:
+    image: postgres:15-alpine
+    container_name: shard1-replica
+    user: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard1
+      PGPASSWORD: replicator_password
+    ports:
+      - "5443:5432"
+    volumes:
+      - shard1_replica_data:/var/lib/postgresql/data
+    depends_on:
+      shard1-primary:
+        condition: service_healthy
+    entrypoint: |
+      bash -c "
+      rm -rf /var/lib/postgresql/data/*
+      until PGPASSWORD=replicator_password pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot_1 --host=shard1-primary --port=5432 -U replicator
+      do
+        echo 'Waiting for primary to be ready...'
+        sleep 2
+      done
+      chmod 0700 /var/lib/postgresql/data
+      exec postgres
+      "
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q t"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+  # Shard 2 - Primary
+  shard2-primary:
+    image: postgres:15-alpine
+    container_name: shard2-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard2
+      SHARD_ID: 2
+    ports:
+      - "5444:5432"
+    volumes:
+      - shard2_primary_data:/var/lib/postgresql/data
+      - ./scripts/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh
+    command: postgres -c wal_level=replica -c max_wal_senders=3 -c max_replication_slots=3
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q f"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+  # Shard 2 - Replica
+  shard2-replica:
+    image: postgres:15-alpine
+    container_name: shard2-replica
+    user: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shard2
+      PGPASSWORD: replicator_password
+    ports:
+      - "5445:5432"
+    volumes:
+      - shard2_replica_data:/var/lib/postgresql/data
+    depends_on:
+      shard2-primary:
+        condition: service_healthy
+    entrypoint: |
+      bash -c "
+      rm -rf /var/lib/postgresql/data/*
+      until PGPASSWORD=replicator_password pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot_2 --host=shard2-primary --port=5432 -U replicator
+      do
+        echo 'Waiting for primary to be ready...'
+        sleep 2
+      done
+      chmod 0700 /var/lib/postgresql/data
+      exec postgres
+      "
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "psql -U postgres -tAc \"SELECT pg_is_in_recovery();\" | grep -q t"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sharding-network
+
+volumes:
+  shard0_primary_data:
+  shard0_replica_data:
+  shard1_primary_data:
+  shard1_replica_data:
+  shard2_primary_data:
+  shard2_replica_data:
+
+networks:
+  sharding-network:
+    driver: bridge
